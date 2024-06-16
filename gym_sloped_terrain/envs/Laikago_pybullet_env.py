@@ -40,7 +40,8 @@ class LaikagoEnv(gym.Env):
 				 seed_value=100,
 				 wedge=True,
 				 IMU_Noise=False,
-				 deg=5):
+				 deg=5,
+                 test=False):
 
         self._is_stairs = stairs
         self._is_wedge = wedge
@@ -85,6 +86,7 @@ class LaikagoEnv(gym.Env):
         self.wedge_start = 0.5
         self.wedge_halflength = 2
 
+        self.test = test
         if gait is 'trot':
             phase = [0, no_of_points, no_of_points, 0]
         elif gait is 'walk':
@@ -146,7 +148,7 @@ class LaikagoEnv(gym.Env):
 
         self.randomize_only_inclines(default=True)
 
-        if (self._is_stairs):
+        if self._is_stairs:
             boxHalfLength = 0.1
             boxHalfWidth = 1
             boxHalfHeight = 0.015
@@ -548,7 +550,10 @@ class LaikagoEnv(gym.Env):
         self.action = action
         ii = 0
 
-        leg_m_angle_cmd = self._walkcon.run_elliptical_Traj_Laikago(self._theta, action)
+        if self.test == True:
+            leg_m_angle_cmd = self._walkcon.run_elliptical(self._theta, action)
+        else:
+            leg_m_angle_cmd = self._walkcon.run_elliptical_Traj_Laikago(self._theta, action)
 
         self._theta = constrain_theta(omega * self.dt + self._theta)
 

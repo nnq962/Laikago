@@ -15,6 +15,8 @@ if __name__ == '__main__':
     parser.add_argument('--seed', help='seed for the random sampling', type=float, default=100)
     parser.add_argument('--EpisodeLength', help='number of gait steps of a episode', type=int, default=1000)
     parser.add_argument('--Downhill', help='should robot walk downhill?', type=bool, default=True)
+    parser.add_argument('--Test', help='Test without data', type=bool, default=False)
+
 
     args = parser.parse_args()
     policy = np.load("experiments/"+args.PolicyDir+"/iterations/best_policy.npy")    
@@ -25,9 +27,14 @@ if __name__ == '__main__':
         args.WedgeIncline = -1*args.WedgeIncline
         args.Downhill = True
 
-
-    env = e.LaikagoEnv(render=True, wedge=WedgePresent, downhill=args.Downhill, stairs=False, seed_value=args.seed,
-                       on_rack=False, gait='trot')
+    env = e.LaikagoEnv(render=True,
+                       wedge=WedgePresent,
+                       downhill=args.Downhill,
+                       stairs=False,
+                       seed_value=args.seed,
+                       on_rack=False,
+                       gait='trot',
+                       test=args.Test)
 
 
     if (args.RandomTest):
