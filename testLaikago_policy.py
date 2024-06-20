@@ -4,6 +4,7 @@ import argparse
 from fabulous.color import blue, green, red, bold
 import numpy as np
 import math
+
 PI = np.pi
 
 if __name__ == '__main__':
@@ -17,14 +18,13 @@ if __name__ == '__main__':
     parser.add_argument('--Downhill', help='should robot walk downhill?', type=bool, default=True)
     parser.add_argument('--Test', help='Test without data', type=bool, default=False)
 
-
     args = parser.parse_args()
-    policy = np.load("experiments/"+args.PolicyDir+"/iterations/best_policy.npy")    
+    policy = np.load("experiments/" + args.PolicyDir + "/iterations/best_policy.npy")
     WedgePresent = True
     if (args.WedgeIncline == 0):
         WedgePresent = False
-    elif(args.WedgeIncline <0):
-        args.WedgeIncline = -1*args.WedgeIncline
+    elif (args.WedgeIncline < 0):
+        args.WedgeIncline = -1 * args.WedgeIncline
         args.Downhill = True
 
     env = e.LaikagoEnv(render=True,
@@ -35,7 +35,6 @@ if __name__ == '__main__':
                        on_rack=False,
                        gait='trot',
                        test=args.Test)
-
 
     if (args.RandomTest):
         env.randomize_only_inclines(default=False)
@@ -52,7 +51,7 @@ if __name__ == '__main__':
         green('\nCoeff. of friction:'), red(env.friction),
         green('\nMotor saturation torque:'), red(env.clips))
 
-	# Simulation starts
+    # Simulation starts
     t_r = 0
     for i_step in range(args.EpisodeLength):
         action = policy.dot(state)

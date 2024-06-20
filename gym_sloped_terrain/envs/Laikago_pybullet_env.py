@@ -21,7 +21,7 @@ no_of_points = 100
 
 def constrain_theta(theta):
     theta = np.fmod(theta, 2 * no_of_points)
-    if (theta < 0):
+    if theta < 0:
         theta = theta + 2 * no_of_points
     return theta
 
@@ -29,18 +29,18 @@ def constrain_theta(theta):
 class LaikagoEnv(gym.Env):
 
     def __init__(self,
-				 render=False,
-				 on_rack=False,
-				 gait='trot',
-				 phase=[0, no_of_points, no_of_points, 0],  # [FR, FL, BR, BL]
-				 action_dim=20,
-				 end_steps=1000,
-				 stairs=False,
-				 downhill=False,
-				 seed_value=100,
-				 wedge=True,
-				 IMU_Noise=False,
-				 deg=5,
+                 render=False,
+                 on_rack=False,
+                 gait='trot',
+                 phase=(0, no_of_points, no_of_points, 0),  # [FR, FL, BR, BL]
+                 action_dim=20,
+                 end_steps=1000,
+                 stairs=False,
+                 downhill=False,
+                 seed_value=100,
+                 wedge=True,
+                 IMU_Noise=False,
+                 deg=5,
                  test=False):
 
         self._is_stairs = stairs
@@ -121,7 +121,7 @@ class LaikagoEnv(gym.Env):
         self.incline_ori = 0
 
         self.prev_incline_vec = (0, 0, 1)
-        self.prev_feet_points = np.ndarray((5,3))
+        self.prev_feet_points = np.ndarray((5, 3))
         self.terrain_pitch = []
         self.add_IMU_noise = IMU_Noise
 
@@ -295,14 +295,14 @@ class LaikagoEnv(gym.Env):
         self._pybullet_client.resetBasePositionAndOrientation(self.Laikago, self.INIT_POSITION, self.INIT_ORIENTATION)
         self._pybullet_client.resetBaseVelocity(self.Laikago, [0, 0, 0], [0, 0, 0])
         self.reset_standing_position()
-        LINK_ID = [0,3,7,11,15]
-        i=0
-        for  link_id in LINK_ID:
-            if(link_id!=0):
-                self.prev_feet_points[i] = np.array(self._pybullet_client.getLinkState(self.Laikago,link_id)[0])
+        LINK_ID = [0, 3, 7, 11, 15]
+        i = 0
+        for link_id in LINK_ID:
+            if (link_id != 0):
+                self.prev_feet_points[i] = np.array(self._pybullet_client.getLinkState(self.Laikago, link_id)[0])
             else:
                 self.prev_feet_points[i] = np.array(self.GetBasePosAndOrientation()[0])
-            i+=1
+            i += 1
         self._pybullet_client.resetDebugVisualizerCamera(self._cam_dist, self._cam_yaw, self._cam_pitch, [0, 0, 0])
         self._n_steps = 0
         return self.GetObservation()
@@ -553,7 +553,7 @@ class LaikagoEnv(gym.Env):
         if self.test == True:
             leg_m_angle_cmd = self._walkcon.run_elliptical(self._theta, action)
         else:
-            leg_m_angle_cmd = self._walkcon.run_elliptical_Traj_Laikago(self._theta, action)
+            leg_m_angle_cmd = self._walkcon.run_elliptical_traj_laikago(self._theta, action)
 
         self._theta = constrain_theta(omega * self.dt + self._theta)
 
@@ -660,7 +660,7 @@ class LaikagoEnv(gym.Env):
         standing_penalty = 3
 
         desired_height = (robot_height_from_support_plane) / math.cos(wedge_angle) + math.tan(wedge_angle) * (
-                    (pos[0]) * math.cos(self.incline_ori) + 0.5)
+                (pos[0]) * math.cos(self.incline_ori) + 0.5)
 
         roll_reward = np.exp(-45 * ((RPY[0] - self.support_plane_estimated_roll) ** 2))
         pitch_reward = np.exp(-45 * ((RPY[1] - self.support_plane_estimated_pitch) ** 2))
@@ -681,7 +681,7 @@ class LaikagoEnv(gym.Env):
             reward = 0
         else:
             reward = round(yaw_reward, 4) + round(pitch_reward, 4) + round(roll_reward, 4) \
-                     + round(height_reward, 4) + 200 * round(step_distance_x, 4) #- 50 * round(step_distance_y,4)
+                     + round(height_reward, 4) + 200 * round(step_distance_x, 4)  #- 50 * round(step_distance_y,4)
 
             '''
             #Penalize for standing at same position for continuous 150 steps
@@ -693,23 +693,20 @@ class LaikagoEnv(gym.Env):
             '''
 
         return reward, done
-    def vis_foot_traj(self,line_thickness = 5,life_time = 15):
-        LINK_ID = [0,3,7,11,15]
-        i=0
-        for  link_id in LINK_ID:
-            if(link_id!=0):
-                current_point = self._pybullet_client.getLinkState(self.Laikago,link_id)[0]
-                self._pybullet_client.addUserDebugLine(current_point,self.prev_feet_points[i],[1,0,0],line_thickness,lifeTime=life_time)
+
+    def vis_foot_traj(self, line_thickness=5, life_time=15):
+        LINK_ID = [0, 3, 7, 11, 15]
+        i = 0
+        for link_id in LINK_ID:
+            if (link_id != 0):
+                current_point = self._pybullet_client.getLinkState(self.Laikago, link_id)[0]
+                self._pybullet_client.addUserDebugLine(current_point, self.prev_feet_points[i], [1, 0, 0],
+                                                       line_thickness, lifeTime=life_time)
             else:
                 current_point = self.GetBasePosAndOrientation()[0]
                 #self._pybullet_client.addUserDebugLine(current_point,self.prev_feet_points[i],[0,0,1],line_thickness,lifeTime=100)
             self.prev_feet_points[i] = current_point
-            i+=1
-
-
-
-
-
+            i += 1
 
     def _apply_pd_control(self, motor_commands, motor_vel_commands, theta):
         '''
@@ -721,14 +718,12 @@ class LaikagoEnv(gym.Env):
         qvel_act = self.GetMotorVelocities()
         applied_motor_torque = np.zeros(12)
 
-        kp_swing = 1200 #1500 #220
-        kd_swing = 80 #20
+        kp_swing = 1200  #1500 #220
+        kd_swing = 80  #20
         kp_stance = 200
         kd_stance = 20
 
-        
         if theta > 100:
-
 
             applied_motor_torque[0:6] = kp_swing * (motor_commands[0:6] - qpos_act[0:6]) + kd_swing * \
                                         (motor_vel_commands[0:6] - qvel_act[0:6])
@@ -736,7 +731,6 @@ class LaikagoEnv(gym.Env):
                                          (motor_vel_commands[6:12] - qvel_act[6:12])
 
         else:
-
 
             applied_motor_torque[0:6] = kp_stance * (motor_commands[0:6] - qpos_act[0:6]) + kd_stance * \
                                         (motor_vel_commands[0:6] - qvel_act[0:6])
@@ -1047,6 +1041,3 @@ class LaikagoEnv(gym.Env):
             force=0,
             targetVelocity=0
         )
-
-
-
