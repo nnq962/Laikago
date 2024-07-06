@@ -39,6 +39,9 @@ class Legdata:
     phi: float = 0.0
     step_length: float = 0.0
     step_height: float = 0.0
+    x_shift: float = 0.0
+    y_shift: float = 0.0
+    z_shift: float = 0.0
 
 
 @dataclass
@@ -105,10 +108,27 @@ class WalkingController:
         Args:
             step_height : step height of each leg trajectories
         """
-        self.front_right.step_length = step_height[0]
-        self.front_left.step_length = step_height[1]
-        self.back_right.step_length = step_height[2]
-        self.back_left.step_length = step_height[3]
+        self.front_right.step_height = step_height[0]
+        self.front_left.step_height = step_height[1]
+        self.back_right.step_height = step_height[2]
+        self.back_left.step_height = step_height[3]
+
+    def _update_elipse_shift(self, x_shift, y_shift, z_shift):
+
+        self.front_right.x_shift = x_shift[0]
+        self.front_left.x_shift = x_shift[1]
+        self.back_right.x_shift = x_shift[2]
+        self.back_left.x_shift = x_shift[3]
+
+        self.front_right.y_shift = y_shift[0]
+        self.front_left.y_shift = y_shift[1]
+        self.back_right.y_shift = y_shift[2]
+        self.back_left.y_shift = y_shift[3]
+
+        self.front_right.z_shift = z_shift[0]
+        self.front_left.z_shift = z_shift[1]
+        self.back_right.z_shift = z_shift[2]
+        self.back_left.z_shift = z_shift[3]
 
     def initialize_leg_state(self, theta, action):
         """
@@ -132,6 +152,7 @@ class WalkingController:
         self._update_leg_step_length_val(leg_sl)
         self._update_leg_step_height_val(leg_sh)
         self._update_leg_phi_val(leg_phi)
+        self._update_elipse_shift(action[12:16], action[16:20], action[20:24])
 
         return legs
 
@@ -154,16 +175,18 @@ class WalkingController:
             leg.r = leg.step_length / 2
 
             if self.gait_type == "trot":
-                x = -leg.r * np.cos(leg_theta)
+                x = -leg.r * np.cos(leg_theta) + leg.x_shift
                 if leg_theta > PI:
                     flag = 0
                 else:
                     flag = 1
-                y = leg.step_height * np.sin(leg_theta) * flag + y_center
+                y = leg.step_height * np.sin(leg_theta) * flag + y_center + leg.y_shift
 
             leg.x, leg.y, leg.z = np.array(
                 [[np.cos(leg.phi), 0, np.sin(leg.phi)], [0, 1, 0], [-np.sin(leg.phi), 0, np.cos(leg.phi)]]) @ np.array(
                 [x, y, 0])
+
+            leg.z = leg.z + leg.z_shift
 
             if leg.name == "fl" or leg.name == "bl":
                 leg.z = -leg.z
@@ -183,14 +206,9 @@ class WalkingController:
 
         return leg_motor_angles
 
-    def run_elliptical(self, theta, action):
+    def run_elliptical(self, theta, action, step_length, step_height, phi):
         legs = self.initialize_leg_state(theta, action)
-
-        step_height = 0.1
-        step_length = 0.1
-        phi = 0
         y_center = -0.35
-
         x = y = 0
 
         for leg in legs:

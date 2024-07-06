@@ -39,7 +39,7 @@ class LaikagoEnv(gym.Env):
                  downhill=False,
                  seed_value=100,
                  wedge=True,
-                 IMU_Noise=False,
+                 imu_noise=False,
                  deg=5,
                  test=False):
 
@@ -87,11 +87,16 @@ class LaikagoEnv(gym.Env):
         self.wedge_halflength = 2
 
         self.test = test
+        self.step_height = 0
+        self.step_length = 0
+        self.phi = 0
+
         if gait is 'trot':
             phase = [0, no_of_points, no_of_points, 0]
         elif gait is 'walk':
             phase = [0, no_of_points, 3 * no_of_points / 2, no_of_points / 2]
         self._walkcon = walking_controller.WalkingController(gait_type=gait, phase=phase)
+
         self.inverse = False
         self._cam_dist = 1.0
         self._cam_yaw = 0.0
@@ -123,9 +128,9 @@ class LaikagoEnv(gym.Env):
         self.prev_incline_vec = (0, 0, 1)
         self.prev_feet_points = np.ndarray((5, 3))
         self.terrain_pitch = []
-        self.add_IMU_noise = IMU_Noise
+        self.add_IMU_noise = imu_noise
 
-        self.INIT_POSITION = [0, 0, 0.65]
+        self.INIT_POSITION = [0, 0, 0.495]
         self.INIT_ORIENTATION = [0, 0, 0, 1]
 
         self.support_plane_estimated_pitch = 0
@@ -135,7 +140,7 @@ class LaikagoEnv(gym.Env):
         self.x_f = 0
         self.y_f = 0
 
-        ## Gym env related mandatory variables
+        # Gym env related mandatory variables
         self._obs_dim = 3 * self.ori_history_length + 2  # [r,p,y]x previous time steps, suport plane roll and pitch
         observation_high = np.array([np.pi / 2] * self._obs_dim)
         observation_low = -observation_high
@@ -167,11 +172,12 @@ class LaikagoEnv(gym.Env):
                 self._pybullet_client.changeDynamics(step, -1, lateralFriction=0.8)
 
     def hard_reset(self):
-        '''
-		Function to
-		1) Set simulation parameters which remains constant throughout the experiments
-		2) load urdf of plane, wedge and robot in initial conditions
-		'''
+        """
+        Function to
+            1) Set simulation parameters which remains constant throughout the experiments
+            2) load urdf of plane, wedge and robot in initial conditions
+        """
+
         self._pybullet_client.resetSimulation()
         self._pybullet_client.setPhysicsEngineParameter(numSolverIterations=int(300))
         self._pybullet_client.setTimeStep(self.dt / self._frame_skip)
@@ -188,7 +194,7 @@ class LaikagoEnv(gym.Env):
             self.wedgePos = [0, 0, self.wedge_halfheight]
             self.wedgeOrientation = self._pybullet_client.getQuaternionFromEuler([0, 0, self.incline_ori])
 
-            if not (self.downhill):
+            if not self.downhill:
                 wedge_model_path = "gym_sloped_terrain/envs/Wedges/uphill/urdf/wedge_" + str(
                     self.incline_deg) + ".urdf"
 
@@ -247,10 +253,10 @@ class LaikagoEnv(gym.Env):
         self.ResetLeg()
 
     def reset(self):
-        '''
-		This function resets the environment
-		Note : Set_Randomization() is called before reset() to either randomize or set environment in default conditions.
-		'''
+        """
+        This function resets the environment
+        Note : Set_Randomization() is called before reset() to either randomize or set environment in default conditions.
+        """
         self._theta = 0
         self._last_base_position = [0, 0, 0]
         self.last_yaw = 0
@@ -298,7 +304,7 @@ class LaikagoEnv(gym.Env):
         LINK_ID = [0, 3, 7, 11, 15]
         i = 0
         for link_id in LINK_ID:
-            if (link_id != 0):
+            if link_id != 0:
                 self.prev_feet_points[i] = np.array(self._pybullet_client.getLinkState(self.Laikago, link_id)[0])
             else:
                 self.prev_feet_points[i] = np.array(self.GetBasePosAndOrientation()[0])
@@ -308,21 +314,21 @@ class LaikagoEnv(gym.Env):
         return self.GetObservation()
 
     def apply_Ext_Force(self, x_f, y_f, link_index=1, visulaize=False, life_time=0.01):
-        '''
-		function to apply external force on the robot
-		Args:
-			x_f  :  external force in x direction
-			y_f  : 	external force in y direction
-			link_index : link index of the robot where the force need to be applied
-			visulaize  :  bool, whether to visulaize external force by arrow symbols
-			life_time  :  life time of the visualization
- 		'''
+        """
+        function to apply external force on the robot
+        Args:
+            x_f  :  external force in x direction
+            y_f  : 	external force in y direction
+            link_index : link index of the robot where the force need to be applied
+            visulaize  :  bool, whether to visulaize external force by arrow symbols
+            life_time  :  lifetime of the visualization
+        """
         force_applied = [x_f, y_f, 0]
         self._pybullet_client.applyExternalForce(self.Laikago, link_index, forceObj=[x_f, y_f, 0], posObj=[0, 0, 0],
                                                  flags=self._pybullet_client.LINK_FRAME)
         f_mag = np.linalg.norm(np.array(force_applied))
 
-        if (visulaize and f_mag != 0.0):
+        if visulaize and f_mag != 0.0:
             point_of_force = self._pybullet_client.getLinkState(self.Laikago, link_index)[0]
 
             lam = 1 / (2 * f_mag)
@@ -334,44 +340,43 @@ class LaikagoEnv(gym.Env):
             self._pybullet_client.addUserDebugLine(point_of_force, dummy_pt, [0, 0, 1], 3, lifeTime=life_time)
 
     def SetLinkMass(self, link_idx, mass=0):
-        '''
-		Function to add extra mass to front and back link of the robot
+        """
+        Function to add extra mass to front and back link of the robot
+        Args:
+            link_idx : link index of the robot whose weight to need be modified
+            mass     : value of extra mass to be added
 
-		Args:
-			link_idx : link index of the robot whose weight to need be modified
-			mass     : value of extra mass to be added
-
-		Ret:
-			new_mass : mass of the link after addition
-		Note : Presently, this function supports addition of masses in the front and back link only (0, 11)
-		'''
+        Ret:
+            new_mass : mass of the link after addition
+        Note : Presently, this function supports addition of masses in the front and back link only (0, 11)
+        """
         link_mass = self._pybullet_client.getDynamicsInfo(self.Laikago, link_idx)[0]
-        if (link_idx == 0):
+        if link_idx == 0:
             link_mass = mass + 1.1
             self._pybullet_client.changeDynamics(self.Laikago, 0, mass=link_mass)
-        elif (link_idx == 11):
+        elif link_idx == 11:
             link_mass = mass + 1.1
             self._pybullet_client.changeDynamics(self.Laikago, 11, mass=link_mass)
 
         return link_mass
 
     def getlinkmass(self, link_idx):
-        '''
-		function to retrieve mass of any link
-		Args:
-			link_idx : link index of the robot
-		Ret:
-			m[0] : mass of the link
-		'''
+        """
+        function to retrieve mass of any link
+        Args:
+            link_idx : link index of the robot
+        Ret:
+            m[0] : mass of the link
+        """
         m = self._pybullet_client.getDynamicsInfo(self.Laikago, link_idx)
         return m[0]
 
     def Set_Randomization(self, default=False, idx1=0, idx2=0, idx3=1, idx0=0, idx11=0, idxc=2, idxp=0, deg=5, ori=0):
-        '''
-		This function helps in randomizing the physical and dynamics parameters of the environment to robustify the policy.
-		These parameters include wedge incline, wedge orientation, friction, mass of links, motor strength and external perturbation force.
-		Note : If default argument is True, this function set above mentioned parameters in user defined manner
-		'''
+        """
+        This function helps in randomizing the physical and dynamics parameters of the environment to robustify the policy.
+        These parameters include wedge incline, wedge orientation, friction, mass of links, motor strength and external perturbation force.
+        Note : If default argument is True, this function set above mentioned parameters in user defined manner
+        """
         if default:
             frc = [0.55, 0.6, 0.8]
             extra_link_mass = [0, 0.05, 0.1, 0.15]
@@ -407,9 +412,9 @@ class LaikagoEnv(gym.Env):
             self.clips = np.round(np.clip(np.random.normal(6.5, 0.4), 5, 8), 2)
 
     def randomize_only_inclines(self, default=False, idx1=0, idx2=0, deg=7, ori=0):
-        '''
+        """
         This function only randomizes the wedge incline and orientation and is called during training without Domain Randomization
-        '''
+        """
         if default:
             self.incline_deg = deg + 2 * idx1
             self.incline_ori = ori + PI / 12 * idx2
@@ -420,23 +425,23 @@ class LaikagoEnv(gym.Env):
             self.incline_ori = (PI / 12) * random.randint(0, 3)  # resolution of 15 degree
 
     def boundYshift(self, x, y):
-        '''
-		This function bounds Y shift with respect to current X shift
-		Args:
-			 x : absolute X-shift
-			 y : Y-Shift
-		Ret :
-			  y : bounded Y-shift
-		'''
+        """
+        This function bounds Y shift with respect to current X shift
+        Args:
+            x : absolute X-shift
+            y : Y-Shift
+        Ret :
+            y : bounded Y-shift
+        """
         if x > 0.5619:
             if y > 1 / (0.5619 - 1) * (x - 1):
                 y = 1 / (0.5619 - 1) * (x - 1)
         return y
 
     def getYXshift(self, yx):
-        '''
-		This function bounds X and Y shifts in a trapezoidal workspace
-		'''
+        """
+        This function bounds X and Y shifts in a trapezoidal workspace
+        """
         y = yx[:4]
         x = yx[4:]
         for i in range(0, 4):
@@ -446,47 +451,52 @@ class LaikagoEnv(gym.Env):
         yx = np.concatenate([y, x])
         return yx
 
-    def transform_action(self, action):
-        '''
-		Transform normalized actions to scaled offsets
-		Args:
-			action : 20 dimensional 1D array of predicted action values from policy in following order :
-					 [(step lengths of FR, FL, BR, BL), (steer angles of FR, FL, BR, BL),
-					  (Y-shifts of FR, FL, BR, BL), (X-shifts of FR, FL, BR, BL),
-					  (Z-shifts of FR, FL, BR, BL)]
-		Ret :
-			action : scaled action parameters
+    @staticmethod
+    def transform_action(action):
+        """
+        Transform normalized actions to scaled offsets
+        Args:
+            action : 20 dimensional 1D array of predicted action values from policy in following order :
+                [(step lengths of FR, FL, BR, BL), (steer angles of FR, FL, BR, BL),
+                (Y-shifts of FR, FL, BR, BL), (X-shifts of FR, FL, BR, BL),
+                (Z-shifts of FR, FL, BR, BL)]
+        Ret:
+            action : scaled action parameters
 
-		Note : The convention of Cartesian axes for leg frame in the codebase follow this order, Y points up, X forward and Z right.
-		       While in research paper we follow this order, Z points up, X forward and Y right.
-		'''
+        Note: The convention of Cartesian axes for leg frame in the codebase follow this order, Y points up, X forward and Z right.
+                While in research paper we follow this order, Z points up, X forward and Y right.
+        """
 
         action = np.clip(action, -1, 1)
 
-        action[:4] = (action[:4] + 1) / 2  # Step lengths are positive always
+        # Step lengths are positive always
+        action[:4] = (action[:4] + 1) / 2
+        action[:4] = action[:4] * 3 * 0.068  # Max steplength = 3 * 0.068 (20.4 cm)
 
-        action[:4] = action[:4] * 3 * 0.068  # Max steplength = 2x0.068
+        # Step heights are positive always
+        action[4:8] = (action[4:8] + 1) / 2
+        action[4:8] = action[4:8] * 0.14  # Max step height = 0.1 (14 cm)
 
-        action[4:8] = action[4:8] * PI / 2  # PHI can be [-pi/2, pi/2]
+        # Phi can be [-pi/2, pi/2]
+        action[8:12] = action[8:12] * PI / 2
 
-        # action[8:12] = (action[8:12] + 1) / 2  # el1ipse center y is positive always
-        action[8:12] = 0.07 * (action[8:12] + 1) / 2  # el1ipse center y is positive always
-
+        # action[8:12] = (action[8:12] + 1) / 2  # Ellipse center y is positive always
+        action[12:16] = 0.07 * (action[12:16] + 1) / 2  # Ellipse center y is positive always
         # action[8:16] = self.getYXshift(action[8:16]) * 2.5  # * 0.1 / 0.068
+        action[16:20] = -1 * 0.06 * action[16:20]
+        action[20:24] = action[20:24] * 0.035 * 3.5  # * 0.1 / 0.068  # ellipse in and out
+        action[20] = -action[20]
+        action[22] = -action[22]
 
-        action[12:16] = -1 * 0.06 * action[12:16]
-        action[16:20] = action[16:20] * 0.035 * 3.5  # * 0.1 / 0.068  # ellipse in and out
-        action[16] = -action[16]
-        action[18] = -action[18]
         return action
 
     def get_foot_contacts(self):
-        '''
-		Retrieve foot contact information with the supporting ground and any special structure (wedge/stairs).
-		Ret:
-			foot_contact_info : 8 dimensional binary array, first four values denote contact information of feet [FR, FL, BR, BL] with the ground
-			while next four with the special structure.
-		'''
+        """
+        Retrieve foot contact information with the supporting ground and any special structure (wedge/stairs).
+        Ret:
+            foot_contact_info : 8 dimensional binary array, first four values denote contact information of feet [FR, FL, BR, BL] with the ground
+            while next four with the special structure.
+        """
         foot_ids = [3, 7, 11, 15]
         foot_contact_info = np.zeros(8)
 
@@ -512,46 +522,46 @@ class LaikagoEnv(gym.Env):
         return foot_contact_info
 
     def step(self, action):
-        '''
-		function to perform one step in the environment
-		Args:
-			action : array of action values
-		Ret:
-			ob 	   : observation after taking step
-			reward     : reward received after taking step
-			done       : whether the step terminates the env
-			{}	   : any information of the env (will be added later)
-		'''
+        """
+        function to perform one step in the environment
+        Args:
+            action : array of action values
+        Ret:
+            ob 	   : observation after taking step
+            reward     : reward received after taking step
+            done       : whether the step terminates the env
+            {}	   : any information of the env (will be added later)
+        """
+
         action = self.transform_action(action)
-
         self.do_simulation(action, n_frames=self._frame_skip)
-
         ob = self.GetObservation()
         reward, done = self._get_reward()
         return ob, reward, done, {}
 
     def CurrentVelocities(self):
-        '''
-		Returns robot's linear and angular velocities
-		Ret:
-			radial_v  : linear velocity
-			current_w : angular velocity
-		'''
+        """
+        Returns robot's linear and angular velocities
+        Ret:
+            radial_v  : linear velocity
+            current_w : angular velocity
+        """
         current_w = self.GetBaseAngularVelocity()[2]
         current_v = self.GetBaseLinearVelocity()
         radial_v = math.sqrt(current_v[0] ** 2 + current_v[1] ** 2)
         return radial_v, current_w
 
     def do_simulation(self, action, n_frames):
-        '''
-		Converts action parameters to corresponding motor commands with the help of a elliptical trajectory controller
-		'''
+        """
+        Converts action parameters to corresponding motor commands with the help of an elliptical trajectory controller
+        """
+
         omega = 2 * no_of_points * self._frequency
         self.action = action
-        ii = 0
 
-        if self.test == True:
-            leg_m_angle_cmd = self._walkcon.run_elliptical(self._theta, action)
+        if self.test is True:
+            leg_m_angle_cmd = self._walkcon.run_elliptical(self._theta, action,
+                                                           self.step_length, self.step_height, self.phi)
         else:
             leg_m_angle_cmd = self._walkcon.run_elliptical_traj_laikago(self._theta, action)
 
@@ -564,13 +574,12 @@ class LaikagoEnv(gym.Env):
         force_visualizing_counter = 0
 
         for _ in range(n_frames):
-            ii = ii + 1
             applied_motor_torque = self._apply_pd_control(m_angle_cmd_ext, m_vel_cmd_ext, self._theta)
             self._pybullet_client.stepSimulation()
 
-            if self._n_steps >= self.pertub_steps and self._n_steps <= self.pertub_steps + self.stride:
+            if self.pertub_steps <= self._n_steps <= self.pertub_steps + self.stride:
                 force_visualizing_counter += 1
-                if (force_visualizing_counter % 7 == 0):
+                if force_visualizing_counter % 7 == 0:
                     self.apply_Ext_Force(self.x_f, self.y_f, visulaize=True, life_time=0.1)
                 else:
                     self.apply_Ext_Force(self.x_f, self.y_f, visulaize=False)
@@ -612,25 +621,25 @@ class LaikagoEnv(gym.Env):
         return rgb_array
 
     def _termination(self, pos, orientation):
-        '''
-		Check termination conditions of the environment
-		Args:
-			pos 		: current position of the robot's base in world frame
-			orientation : current orientation of robot's base (Quaternions) in world frame
-		Ret:
-			done 		: return True if termination conditions satisfied
-		'''
+        """
+        Check termination conditions of the environment
+        Args:
+            pos 		: current position of the robot's base in world frame
+            orientation : current orientation of robot's base (Quaternions) in world frame
+        Ret:
+            done 		: return True if termination conditions satisfied
+        """
         done = False
-        RPY = self._pybullet_client.getEulerFromQuaternion(orientation)
+        rpy = self._pybullet_client.getEulerFromQuaternion(orientation)
 
         if self._n_steps >= self.termination_steps:
             done = True
         else:
-            if abs(RPY[0]) > math.radians(30):
+            if abs(rpy[0]) > math.radians(30):
                 print('Oops, Robot about to fall sideways! Terminated')
                 done = True
 
-            if abs(RPY[1]) > math.radians(35):
+            if abs(rpy[1]) > math.radians(35):
                 print('Oops, Robot doing wheely! Terminated')
                 done = True
 
@@ -641,13 +650,13 @@ class LaikagoEnv(gym.Env):
         return done
 
     def _get_reward(self):
-        '''
+        """
         Calculates reward achieved by the robot for RPY stability, torso height criterion and forward distance moved on the slope:
         Ret:
             reward : reward achieved
             done   : return True if environment terminates
 
-        '''
+        """
         wedge_angle = self.incline_deg * PI / 180
         robot_height_from_support_plane = 0.40
         pos, ori = self.GetBasePosAndOrientation()
@@ -659,13 +668,17 @@ class LaikagoEnv(gym.Env):
         self.current_com_height = current_height
         standing_penalty = 3
 
-        desired_height = (robot_height_from_support_plane) / math.cos(wedge_angle) + math.tan(wedge_angle) * (
+        desired_height = robot_height_from_support_plane / math.cos(wedge_angle) + math.tan(wedge_angle) * (
                 (pos[0]) * math.cos(self.incline_ori) + 0.5)
 
-        roll_reward = np.exp(-45 * ((RPY[0] - self.support_plane_estimated_roll) ** 2))
-        pitch_reward = np.exp(-45 * ((RPY[1] - self.support_plane_estimated_pitch) ** 2))
-        yaw_reward = np.exp(-40 * (RPY[2] ** 2))
-        height_reward = np.exp(-800 * (desired_height - current_height) ** 2)
+        # roll_reward = np.exp(-45 * ((RPY[0] - self.support_plane_estimated_roll) ** 2))
+        # pitch_reward = np.exp(-45 * ((RPY[1] - self.support_plane_estimated_pitch) ** 2))
+        # yaw_reward = np.exp(-40 * (RPY[2] ** 2))
+        # height_reward = np.exp(-800 * (desired_height - current_height) ** 2)
+
+        roll_reward = RPY[0] - self.support_plane_estimated_roll
+        pitch_reward = RPY[1] - self.support_plane_estimated_pitch
+        yaw_reward = RPY[2]
 
         x = pos[0]
         y = pos[1]
@@ -680,8 +693,10 @@ class LaikagoEnv(gym.Env):
         if done:
             reward = 0
         else:
-            reward = round(yaw_reward, 4) + round(pitch_reward, 4) + round(roll_reward, 4) \
-                     + round(height_reward, 4) + 200 * round(step_distance_x, 4)  #- 50 * round(step_distance_y,4)
+            distance_reward = 200 * step_distance_x - 50 * step_distance_y
+            stability_penalty = 10 * np.abs(roll_reward) + 10 * np.abs(pitch_reward) + 5 * np.abs(yaw_reward)
+
+            reward = distance_reward - stability_penalty
 
             '''
             #Penalize for standing at same position for continuous 150 steps
@@ -695,31 +710,31 @@ class LaikagoEnv(gym.Env):
         return reward, done
 
     def vis_foot_traj(self, line_thickness=5, life_time=15):
-        LINK_ID = [0, 3, 7, 11, 15]
+        link_id = [0, 3, 7, 11, 15]
         i = 0
-        for link_id in LINK_ID:
-            if (link_id != 0):
+        for link_id in link_id:
+            if link_id != 0:
                 current_point = self._pybullet_client.getLinkState(self.Laikago, link_id)[0]
                 self._pybullet_client.addUserDebugLine(current_point, self.prev_feet_points[i], [1, 0, 0],
                                                        line_thickness, lifeTime=life_time)
             else:
                 current_point = self.GetBasePosAndOrientation()[0]
-                #self._pybullet_client.addUserDebugLine(current_point,self.prev_feet_points[i],[0,0,1],line_thickness,lifeTime=100)
+                # self._pybullet_client.addUserDebugLine(current_point,self.prev_feet_points[i],[0,0,1],line_thickness,lifeTime=100)
             self.prev_feet_points[i] = current_point
             i += 1
 
     def _apply_pd_control(self, motor_commands, motor_vel_commands, theta):
-        '''
-		Apply PD control to reach desired motor position commands
-		Ret:
-			applied_motor_torque : array of applied motor torque values in order [FLH FLK FRH FRK BLH BLK BRH BRK FLA FRA BLA BRA]
-		'''
+        """
+        Apply PD control to reach desired motor position commands
+        Ret:
+            applied_motor_torque : array of applied motor torque values in order [FLH FLK FRH FRK BLH BLK BRH BRK FLA FRA BLA BRA]
+        """
         qpos_act = self.GetMotorAngles()
         qvel_act = self.GetMotorVelocities()
         applied_motor_torque = np.zeros(12)
 
-        kp_swing = 1200  #1500 #220
-        kd_swing = 80  #20
+        kp_swing = 1200  # 1500 # 220 -> 1200, 200
+        kd_swing = 80  # 20
         kp_stance = 200
         kd_stance = 20
 
@@ -746,26 +761,27 @@ class LaikagoEnv(gym.Env):
             self.SetMotorTorqueById(motor_id, motor_torque)
         return applied_motor_torque
 
-    def add_noise(self, sensor_value, SD=0.04):
-        '''
-		Adds sensor noise of user defined standard deviation in current sensor_value
-		'''
-        noise = np.random.normal(0, SD, 1)
+    @staticmethod
+    def add_noise(sensor_value, sd=0.04):
+        """
+        Adds sensor noise of user defined standard deviation in current sensor_value
+        """
+        noise = np.random.normal(0, sd, 1)
         sensor_value = sensor_value + noise[0]
         return sensor_value
 
     def GetObservation(self):
-        '''
-		This function returns the current observation of the environment for the interested task
-		Ret:
-			obs : [R(t-2), P(t-2), Y(t-2), R(t-1), P(t-1), Y(t-1), R(t), P(t), Y(t), estimated support plane (roll, pitch) ]
-		'''
+        """
+        This function returns the current observation of the environment for the interested task
+        Ret:
+            obs : [R(t-2), P(t-2), Y(t-2), R(t-1), P(t-1), Y(t-1), R(t), P(t), Y(t), estimated support plane (roll, pitch)]
+        """
         pos, ori = self.GetBasePosAndOrientation()
-        RPY = self._pybullet_client.getEulerFromQuaternion(ori)
-        RPY = np.round(RPY, 5)
+        rpy = self._pybullet_client.getEulerFromQuaternion(ori)
+        rpy = np.round(rpy, 5)
 
-        for val in RPY:
-            if (self.add_IMU_noise):
+        for val in rpy:
+            if self.add_IMU_noise:
                 val = self.add_noise(val)
             self.ori_history_queue.append(val)
 
@@ -775,50 +791,50 @@ class LaikagoEnv(gym.Env):
         return obs
 
     def GetMotorAngles(self):
-        '''
-		This function returns the current joint angles in order [FLH FLK FRH FRK BLH BLK BRH BRK FLA FRA BLA BRA ]
-		'''
+        """
+        This function returns the current joint angles in order [FLH FLK FRH FRK BLH BLK BRH BRK FLA FRA BLA BRA ]
+        """
         motor_ang = [self._pybullet_client.getJointState(self.Laikago, motor_id)[0] for motor_id in self._motor_id_list]
         return motor_ang
 
     def GetMotorVelocities(self):
-        '''
-		This function returns the current joint velocities in order [FLH FLK FRH FRK BLH BLK BRH BRK FLA FRA BLA BRA ]
-		'''
+        """
+        This function returns the current joint velocities in order [FLH FLK FRH FRK BLH BLK BRH BRK FLA FRA BLA BRA ]
+        """
         motor_vel = [self._pybullet_client.getJointState(self.Laikago, motor_id)[1] for motor_id in self._motor_id_list]
         return motor_vel
 
     def GetBasePosAndOrientation(self):
-        '''
-		This function returns the robot torso position(X,Y,Z) and orientation(Quaternions) in world frame
-		'''
+        """
+        This function returns the robot torso position(X,Y,Z) and orientation(Quaternions) in world frame
+        """
         position, orientation = (self._pybullet_client.getBasePositionAndOrientation(self.Laikago))
         return position, orientation
 
     def GetBaseAngularVelocity(self):
-        '''
-		This function returns the robot base angular velocity in world frame
-		Ret: list of 3 floats
-		'''
+        """
+        This function returns the robot base angular velocity in world frame
+        Ret: list of 3 floats
+        """
         basevelocity = self._pybullet_client.getBaseVelocity(self.Laikago)
         return basevelocity[1]
 
     def GetBaseLinearVelocity(self):
-        '''
-		This function returns the robot base linear velocity in world frame
-		Ret: list of 3 floats
-		'''
+        """
+        This function returns the robot base linear velocity in world frame
+        Ret: list of 3 floats
+		"""
         basevelocity = self._pybullet_client.getBaseVelocity(self.Laikago)
         return basevelocity[0]
 
     def SetFootFriction(self, foot_friction):
-        '''
-		This function modify coefficient of friction of the robot feet
-		Args :
-		foot_friction :  desired friction coefficient of feet
-		Ret  :
-		foot_friction :  current coefficient of friction
-		'''
+        """
+        This function modify coefficient of friction of the robot feet
+        Args :
+            foot_friction :  desired friction coefficient of feet
+        Rets:
+            foot_friction :  current coefficient of friction
+        """
         FOOT_LINK_ID = [3, 7, 11, 15]
         for link_id in FOOT_LINK_ID:
             self._pybullet_client.changeDynamics(
@@ -826,18 +842,17 @@ class LaikagoEnv(gym.Env):
         return foot_friction
 
     def SetWedgeFriction(self, friction):
-        '''
-		This function modify friction coefficient of the wedge
-		Args :
-		foot_friction :  desired friction coefficient of the wedge
-		'''
-        self._pybullet_client.changeDynamics(
-            self.wedge, -1, lateralFriction=friction)
+        """
+        This function modify friction coefficient of the wedge
+        Args :
+            foot_friction :  desired friction coefficient of the wedge
+        """
+        self._pybullet_client.changeDynamics(self.wedge, -1, lateralFriction=friction)
 
     def SetMotorTorqueById(self, motor_id, torque):
-        '''
-		function to set motor torque for respective motor_id
-		'''
+        """
+        function to set motor torque for respective motor_id
+        """
         self._pybullet_client.setJointMotorControl2(
             bodyIndex=self.Laikago,
             jointIndex=motor_id,
@@ -845,12 +860,12 @@ class LaikagoEnv(gym.Env):
             force=torque)
 
     def BuildMotorIdList(self):
-        '''
-		function to map joint_names with respective motor_ids as well as create a list of motor_ids
-		Ret:
-		joint_name_to_id : Dictionary of joint_name to motor_id
-		motor_id_list	 : List of joint_ids for respective motors in order [FLH FLK FRH FRK BLH BLK BRH BRK FLA FRA BLA BRA ]
-		'''
+        """
+        function to map joint_names with respective motor_ids as well as create a list of motor_ids
+        Ret:
+            joint_name_to_id : Dictionary of joint_name to motor_id
+            motor_id_list	 : List of joint_ids for respective motors in order [FLH FLK FRH FRK BLH BLK BRH BRK FLA FRA BLA BRA ]
+        """
         num_joints = self._pybullet_client.getNumJoints(self.Laikago)
         joint_name_to_id = {}
         for i in range(num_joints):
@@ -880,13 +895,13 @@ class LaikagoEnv(gym.Env):
         return joint_name_to_id, motor_id_list
 
     def ResetLeg(self):
-        '''
-		function to reset hip and knee joints' state
-		Args:
-			 leg_id 		  : denotes leg index
-			 add_constraint   : bool to create constraints in lower joints of five bar leg mechanisim
-			 standstilltorque : value of initial torque to set in hip and knee motors for standing condition
-		'''
+        """
+        function to reset hip and knee joints' state
+        Args:
+            leg_id 		  : denotes leg index
+            add_constraint   : bool to create constraints in lower joints of five bar leg mechanisim
+            standstilltorque : value of initial torque to set in hip and knee motors for standing condition
+        """
         self._pybullet_client.resetJointState(
             self.Laikago,
             self._joint_name_to_id["FL_upper_leg_2_hip_motor_joint"],  # motor
@@ -992,9 +1007,9 @@ class LaikagoEnv(gym.Env):
         )
 
     def ResetPoseForAbd(self):
-        '''
-		Reset initial conditions of abduction joints
-		'''
+        """
+        Reset initial conditions of abduction joints
+        """
         self._pybullet_client.resetJointState(
             self.Laikago,
             self._joint_name_to_id["FL_hip_motor_2_chassis_joint"],
